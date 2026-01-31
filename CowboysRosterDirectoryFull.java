@@ -443,8 +443,6 @@ private void displayTrainers() {
     }
     resultArea.setText("Trainers: " + trainers.size());
 }
-
-
 private void displayOtherStaff() {
     tableModel.setRowCount(0);
     for (Staff s : otherStaff) {
@@ -557,7 +555,6 @@ static class Coach {
         this.college = college;
     }
 }
-
     // Cheerleader class
 static class Cheerleader {
     String name, role, height, college;
@@ -590,8 +587,6 @@ static class Staff {
         this.college = college;
     }
 }
-
-
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> new CowboysRosterDirectoryFull());
     }
