@@ -303,50 +303,169 @@ public class M5_Project_Kuttler {
         }
     }
 
-    // ── Bar Chart ─────────────────────────────────────────────────────
-    static class BarChartPanel extends JPanel {
-        private int bags=0,trucksMax=0; private double cost=0; private boolean hasData=false;
-        BarChartPanel() { setPreferredSize(new Dimension(500,145)); setOpaque(false); }
-        void update(int b,int t,double c){bags=b;trucksMax=t;cost=c;hasData=true;repaint();}
-        void reset(){hasData=false;repaint();}
-        @Override protected void paintComponent(Graphics g) {
+    // ── Gauge Panel (3 speedometer gauges) ───────────────────────────
+    static class GaugePanel extends JPanel {
+        private int bags=0, trucksMin=0, trucksMax=0; private double cost=0;
+        private boolean hasData=false;
+        // Animated sweep angles (0..1)
+        private float aBags=0, aTrucksMin=0, aTrucksMax=0, aCost=0;
+        private Timer sweepTimer;
+
+        // Each gauge has a sensible max scale
+        private int maxBags=500, maxTrucks=20;
+        private double maxCost=10000;
+
+        GaugePanel() {
+            setPreferredSize(new Dimension(560, 200));
+            setOpaque(false);
+        }
+
+        void update(int b, int tMin, int tMax, double c) {
+            bags=b; trucksMin=tMin; trucksMax=tMax; cost=c; hasData=true;
+            maxBags   = Math.max(500,  (int)(b    * 1.25));
+            maxTrucks = Math.max(20,   (int)(tMax * 1.25));
+            maxCost   = Math.max(10000, c * 1.25);
+            aBags=0; aTrucksMin=0; aTrucksMax=0; aCost=0;
+            if (sweepTimer!=null) sweepTimer.stop();
+            sweepTimer = new Timer(16, null);
+            sweepTimer.addActionListener(new ActionListener() {
+                float tb  =(float)Math.min(1.0,(double)bags/maxBags);
+                float ttMn=(float)Math.min(1.0,(double)trucksMin/maxTrucks);
+                float ttMx=(float)Math.min(1.0,(double)trucksMax/maxTrucks);
+                float tc  =(float)Math.min(1.0,cost/maxCost);
+                public void actionPerformed(ActionEvent e) {
+                    float speed=0.025f;
+                    aBags      = Math.min(tb,   aBags+speed);
+                    aTrucksMin = Math.min(ttMn, aTrucksMin+speed);
+                    aTrucksMax = Math.min(ttMx, aTrucksMax+speed);
+                    aCost      = Math.min(tc,   aCost+speed);
+                    repaint();
+                    if (aBags>=tb && aTrucksMin>=ttMn && aTrucksMax>=ttMx && aCost>=tc) sweepTimer.stop();
+                }
+            });
+            sweepTimer.start();
+        }
+
+        void reset() {
+            hasData=false; aBags=0; aTrucksMin=0; aTrucksMax=0; aCost=0;
+            if (sweepTimer!=null) sweepTimer.stop();
+            repaint();
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
             super.paintComponent(g);
-            Graphics2D g2=(Graphics2D)g;
-            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
-            g2.setColor(new Color(0,0,0,30)); g2.fillRoundRect(4,6,getWidth()-6,getHeight()-6,18,18);
-            g2.setColor(theme().panelBg); g2.fillRoundRect(0,0,getWidth()-4,getHeight()-4,18,18);
+            Graphics2D g2 = (Graphics2D)g;
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            int W=getWidth()-4, H=getHeight()-4;
+            g2.setColor(new Color(0,0,0,30)); g2.fillRoundRect(4,6,W,H,18,18);
+            g2.setColor(theme().panelBg);     g2.fillRoundRect(0,0,W,H,18,18);
             g2.setColor(theme().border); g2.setStroke(new BasicStroke(1.5f));
-            g2.drawRoundRect(0,0,getWidth()-5,getHeight()-5,18,18);
+            g2.drawRoundRect(0,0,W,H,18,18);
+
             g2.setFont(new Font("SansSerif",Font.BOLD,12)); g2.setColor(theme().text);
-            g2.drawString("Job Breakdown Chart",14,20);
-            if(!hasData){
+            g2.drawString("Job Gauges",14,20);
+
+            if (!hasData) {
                 g2.setColor(theme().subtext); g2.setFont(new Font("SansSerif",Font.ITALIC,12));
-                g2.drawString("Enter values and click Calculate to see chart.",80,80); return;
+                g2.drawString("Enter values and click Calculate to see gauges.", 70, 110);
+                return;
             }
-            int cX=55,cY=30,cH=78,bW=65,gap=42;
-            double sB=bags/100.0,sT=trucksMax,sC=cost/100.0;
-            double mx=Math.max(sB,Math.max(sT,Math.max(sC,1)));
-            String[] lbls={"Bags (\u00f7100)","Trucks","Cost ($\u00f7100)"};
-            Color[] cols={new Color(52,152,219),new Color(155,89,182),new Color(230,126,34)};
-            double[] sh={sB/mx,sT/mx,sC/mx};
-            String[] vl={String.valueOf(bags),String.valueOf(trucksMax),String.format("$%.0f",cost)};
-            for(int i=0;i<3;i++){
-                int x=cX+i*(bW+gap),bh=(int)(cH*sh[i]);
-                if(bh<2&&sh[i]>0)bh=2;
-                int y=cY+cH-bh;
-                GradientPaint gp=new GradientPaint(x,y,cols[i].brighter(),x,y+bh,cols[i].darker());
-                g2.setPaint(gp); g2.fillRoundRect(x,y,bW,bh,8,8);
-                g2.setColor(cols[i].darker()); g2.setStroke(new BasicStroke(1.2f));
-                g2.drawRoundRect(x,y,bW,bh,8,8);
-                g2.setColor(theme().text); g2.setFont(new Font("SansSerif",Font.BOLD,11));
-                int sw=g2.getFontMetrics().stringWidth(vl[i]);
-                g2.drawString(vl[i],x+bW/2-sw/2,y-4);
-                g2.setFont(new Font("SansSerif",Font.PLAIN,10));
-                int lw=g2.getFontMetrics().stringWidth(lbls[i]);
-                g2.drawString(lbls[i],x+bW/2-lw/2,cY+cH+15);
+
+            int spacing=getWidth()/3;
+            int[] cx={spacing/2, spacing+spacing/2, spacing*2+spacing/2};
+            int cy=getHeight()/2+10, r=68;
+            Color colBags=new Color(52,152,219), colTruck=new Color(155,89,182), colCost=new Color(230,126,34);
+
+            // Bags gauge (single needle)
+            drawGauge(g2,cx[0],cy,r,aBags,-1,colBags,"80lb Bags",
+                String.valueOf(bags),"max "+maxBags);
+
+            // Trucks gauge (two needles: min=bright, max=dimmer)
+            drawGauge(g2,cx[1],cy,r,aTrucksMin,aTrucksMax,colTruck,"Trucks",
+                trucksMin+"–"+trucksMax,"max "+maxTrucks);
+
+            // Cost gauge (single needle)
+            drawGauge(g2,cx[2],cy,r,aCost,-1,colCost,"Est. Cost",
+                String.format("$%.0f",cost),"max $"+(int)maxCost);
+        }
+
+        // sweepMin = primary needle; sweepMax = second needle (-1 = none)
+        private void drawGauge(Graphics2D g2, int cx, int cy, int r,
+                                float sweepMin, float sweepMax, Color col,
+                                String label, String value, String maxLbl) {
+            int startAngle=195, totalArc=210;
+
+            // Track
+            g2.setStroke(new BasicStroke(10f,BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND));
+            g2.setColor(new Color(150,150,155,80));
+            g2.drawArc(cx-r,cy-r,r*2,r*2,startAngle,-totalArc);
+
+            // Fill arc to primary sweep
+            if (sweepMin>0) {
+                g2.setColor(col);
+                g2.drawArc(cx-r,cy-r,r*2,r*2,startAngle,-(int)(totalArc*sweepMin));
             }
-            g2.setColor(theme().border); g2.setStroke(new BasicStroke(1.5f));
-            g2.drawLine(cX-5,cY+cH,cX+3*(bW+gap)-gap+5,cY+cH);
+
+            // Tick marks
+            g2.setStroke(new BasicStroke(1.2f));
+            for (int t2=0;t2<=10;t2++) {
+                double a=Math.toRadians(startAngle-(totalArc*t2/10.0));
+                int inner=(t2%5==0)?r-14:r-9;
+                g2.setColor(t2%5==0?theme().text:theme().subtext);
+                g2.drawLine((int)(cx+Math.cos(a)*r),(int)(cy-Math.sin(a)*r),
+                            (int)(cx+Math.cos(a)*inner),(int)(cy-Math.sin(a)*inner));
+            }
+
+            // Second needle (max trucks) — drawn first so min needle renders on top
+            if (sweepMax>=0) {
+                double angMax=Math.toRadians(startAngle-totalArc*sweepMax);
+                int nx2=(int)(cx+Math.cos(angMax)*(r-22));
+                int ny2=(int)(cy-Math.sin(angMax)*(r-22));
+                g2.setStroke(new BasicStroke(2f,BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND));
+                // Dimmer / semi-transparent color for max needle
+                g2.setColor(new Color(col.getRed(),col.getGreen(),col.getBlue(),140));
+                g2.drawLine(cx,cy,nx2,ny2);
+                // Small diamond tip on max needle
+                int[] dx={nx2,nx2+4,nx2,nx2-4}, dy={ny2-4,ny2,ny2+4,ny2};
+                g2.fillPolygon(dx,dy,4);
+            }
+
+            // Primary needle (min trucks / only needle for bags & cost)
+            double angMin=Math.toRadians(startAngle-totalArc*sweepMin);
+            int nx=(int)(cx+Math.cos(angMin)*(r-18));
+            int ny=(int)(cy-Math.sin(angMin)*(r-18));
+            g2.setStroke(new BasicStroke(2.5f,BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND));
+            g2.setColor(col.brighter());
+            g2.drawLine(cx,cy,nx,ny);
+
+            // Hub
+            g2.setColor(theme().text); g2.fillOval(cx-5,cy-5,10,10);
+            g2.setColor(col);          g2.fillOval(cx-3,cy-3, 6, 6);
+
+            // Value
+            g2.setFont(new Font("SansSerif",Font.BOLD,16)); g2.setColor(col);
+            FontMetrics fm=g2.getFontMetrics();
+            g2.drawString(value,cx-fm.stringWidth(value)/2,cy+20);
+
+            // Label
+            g2.setFont(new Font("SansSerif",Font.BOLD,11)); g2.setColor(theme().text);
+            fm=g2.getFontMetrics();
+            g2.drawString(label,cx-fm.stringWidth(label)/2,cy+34);
+
+            // Legend for two-needle gauge
+            if (sweepMax>=0) {
+                g2.setFont(new Font("SansSerif",Font.PLAIN,9)); g2.setColor(col.brighter());
+                g2.drawString("min",cx-18,cy+46);
+                g2.setColor(new Color(col.getRed(),col.getGreen(),col.getBlue(),160));
+                g2.drawString("max",cx+4,cy+46);
+            }
+
+            // Max scale label
+            g2.setFont(new Font("SansSerif",Font.PLAIN,9)); g2.setColor(theme().subtext);
+            fm=g2.getFontMetrics();
+            g2.drawString(maxLbl,cx-fm.stringWidth(maxLbl)/2,cy+r-2);
         }
     }
 
@@ -638,7 +757,7 @@ public class M5_Project_Kuttler {
         tipLbl.setForeground(theme().subtext); tipLbl.setHorizontalAlignment(SwingConstants.CENTER);
 
         // ── Bar chart ─────────────────────────────────────────────────
-        BarChartPanel barChart=new BarChartPanel();
+        GaugePanel gaugePanel=new GaugePanel();
 
         // ── History ───────────────────────────────────────────────────
         DefaultListModel<String> histModel=new DefaultListModel<>();
@@ -681,7 +800,7 @@ public class M5_Project_Kuttler {
         for(JComponent c:new JComponent[]{unitCard,mixCard,inputCard}){
             c.setAlignmentX(Component.CENTER_ALIGNMENT); center.add(c); center.add(Box.createVerticalStrut(10));
         }
-        for(JComponent c:new JComponent[]{btnPanel,truckPanel,pbWrap,resultsCard,tipLbl,barChart,histScroll})
+        for(JComponent c:new JComponent[]{btnPanel,truckPanel,pbWrap,resultsCard,tipLbl,gaugePanel,histScroll})
             c.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         center.add(btnPanel);     center.add(Box.createVerticalStrut(8));
@@ -689,7 +808,7 @@ public class M5_Project_Kuttler {
         center.add(pbWrap);       center.add(Box.createVerticalStrut(10));
         center.add(resultsCard);  center.add(Box.createVerticalStrut(4));
         center.add(tipLbl);       center.add(Box.createVerticalStrut(10));
-        center.add(barChart);     center.add(Box.createVerticalStrut(10));
+        center.add(gaugePanel);     center.add(Box.createVerticalStrut(10));
         center.add(histScroll);   center.add(Box.createVerticalStrut(8));
 
         JScrollPane scroll=new JScrollPane(center);
@@ -735,7 +854,7 @@ public class M5_Project_Kuttler {
                     new Timer(5*80,  ev->{ rValues[5].setText(tMin+"\u2013"+tMax+" truck(s)"); ((Timer)ev.getSource()).stop(); }).start();
 
                     tipLbl.setText(tip);
-                    barChart.update(bags,tMax,cost);
+                    gaugePanel.update(bags,tMin,tMax,cost);
                     histModel.add(0,hist);
 
                     // Confetti burst from center-top of screen
@@ -755,7 +874,7 @@ public class M5_Project_Kuttler {
             for(JLabel lv:rValues){lv.setText("--");lv.setForeground(theme().accent);lv.setVisible(true);}
             jobSizeLbl.setText(" "); tipLbl.setText(" ");
             progressBar.setValue(0); progressBar.setString("Ready"); progressBar.setForeground(new Color(39,174,96));
-            barChart.reset(); truckPanel.reset(); resultsCard.reset();
+            gaugePanel.reset(); truckPanel.reset(); resultsCard.reset();
         });
         clearBtn.addActionListener(e->histModel.clear());
 
