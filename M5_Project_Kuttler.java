@@ -45,33 +45,29 @@ public class M5_Project_Kuttler {
     static int lastBags=0,lastTMin=0,lastTMax=0,lastMix=0;
     static double lastWaste=0;
 
-    // ── Sound: three rising "ding" chimes ────────────────────────────
+    // ── Sound: play horn.wav from same directory as the .java file ───
     static void playHorn(){
         new Thread(()->{
             try{
-                float sr=44100f;
-                // Play three ascending chime notes: C5, E5, G5
-                int[] freqs={523, 659, 784};
-                for(int fi=0;fi<freqs.length;fi++){
-                    int dur=(int)(sr*0.35f); // 0.35s per note
-                    byte[] buf=new byte[dur];
-                    for(int i=0;i<dur;i++){
-                        double t=i/sr;
-                        // Exponential decay envelope — sharp attack, smooth tail
-                        double env=Math.exp(-t*6.0);
-                        // Pure sine + soft harmonic for warmth
-                        double wave=0.7*Math.sin(2*Math.PI*freqs[fi]*t)
-                                   +0.3*Math.sin(2*Math.PI*freqs[fi]*2*t);
-                        buf[i]=(byte)(wave*env*110);
-                    }
-                    AudioFormat af=new AudioFormat(sr,8,1,true,false);
-                    SourceDataLine line=(SourceDataLine)AudioSystem.getLine(new DataLine.Info(SourceDataLine.class,af));
-                    line.open(af); line.start();
-                    line.write(buf,0,buf.length);
-                    line.drain(); line.close();
-                    // Small gap between notes
-                    Thread.sleep(60);
+                // Look for horn.wav next to the running class
+                java.io.File wavFile = new java.io.File("horn.wav");
+                if(!wavFile.exists()){
+                    // Also try the directory of the class file
+                    String classDir = M5_Project_Kuttler.class.getProtectionDomain()
+                        .getCodeSource().getLocation().toURI().getPath();
+                    wavFile = new java.io.File(new java.io.File(classDir).getParent(), "horn.wav");
                 }
+                if(!wavFile.exists()) return; // silently skip if file missing
+                AudioInputStream ais = AudioSystem.getAudioInputStream(wavFile);
+                Clip clip = AudioSystem.getClip();
+                clip.open(ais);
+                clip.start();
+                // Wait for clip to finish then close
+                clip.addLineListener(event -> {
+                    if(event.getType() == LineEvent.Type.STOP){
+                        clip.close();
+                    }
+                });
             }catch(Exception ignored){}
         }).start();
     }
