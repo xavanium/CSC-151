@@ -17,7 +17,11 @@ public class M5_Project_Kuttler {
     static final double MEDIUM_JOB  = 20.0;
 
     static final String[] MIX_NAMES = {"Standard","High-Strength","Lightweight"};
-    static final double[] MIX_COSTS = {150.0, 210.0, 175.0};
+    static final double[] MIX_COSTS = {
+    135.0,  // Standard (~3000 PSI)
+    150.0,  // High-strength (~4000 PSI)
+    145.0   // Lightweight / specialty
+};
     static final String[] MIX_DESCS = {
         "General purpose. Good for slabs & foundations.",
         "Extra durability for heavy loads & structures.",
@@ -317,10 +321,19 @@ static class CostBreakdownDialog extends JDialog {
         card.add(title, gbc);
 
         // ── Calculations ──────────────────────────
-        double laborRate = 6.0;
+        double laborRate;
+
+if (lastVolYd < 5) {
+    laborRate = 6.5; // small job (more expensive)
+} else if (lastVolYd < 20) {
+    laborRate = 5.75; // typical
+} else {
+    laborRate = 5.25; // bulk discount
+}
+        double deliveryCost = 180 * lastTMax; // avg per truck
         double laborCost = lastArea * laborRate;
         double equipmentCost = lastVolYd < 5 ? 150 : 300;
-        double totalCost = lastCost + laborCost + equipmentCost;
+        double totalCost = lastCost + laborCost + equipmentCost + deliveryCost;
 
         gbc.gridwidth = 1;
         gbc.gridy++;
@@ -539,6 +552,7 @@ static class CostBreakdownDialog extends JDialog {
                 int bags=(int)Math.ceil(volFt/BAG_COVERAGE),tMin=(int)Math.ceil(volYd/10.0),tMax=(int)Math.ceil(volYd/8.0);
                 // Save for print/compare
                 lastArea=area;lastVolFt=volFt;lastVolYd=volYd;lastCost=cost;lastBags=bags;lastTMin=tMin;lastTMax=tMax;lastMix=mix;lastWaste=wasteFactor-1.0;
+                
                 // Update compare Slab A labels live
                 aLabels[0].setText(String.format("%.1f",rL)+(metric?" m":" ft"));
                 aLabels[1].setText(String.format("%.1f",rW)+(metric?" m":" ft"));
