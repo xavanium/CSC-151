@@ -298,7 +298,7 @@ static class CostBreakdownDialog extends JDialog {
 
     CostBreakdownDialog(JFrame parent) {
         super(parent, "Full Job Cost Estimate", true);
-        setSize(360, 320);
+        setSize(450, 450);
         setLocationRelativeTo(parent);
         setLayout(new BorderLayout());
         getContentPane().setBackground(theme().bg);
@@ -368,6 +368,18 @@ if (lastVolYd < 5) {
 
             gbc.gridy++;
         }
+        // ── Source / Disclaimer ──────────────────────────
+        gbc.insets = new Insets(10, 6, 6, 6);
+JLabel source = new JLabel(
+    "<html><i>Based on Fayetteville, NC market rates (Fay Block Materials region).</i></html>"
+);
+source.setForeground(theme().subtext);
+source.setFont(new Font("SansSerif", Font.PLAIN, 10));
+
+gbc.gridx = 0;
+gbc.gridwidth = 2;
+gbc.gridy++;
+card.add(source, gbc);
 
         // ── Close Button ──────────────────────────
         JButton closeBtn = new JButton("Close");
