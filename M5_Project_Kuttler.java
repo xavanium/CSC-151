@@ -18,15 +18,30 @@ public class M5_Project_Kuttler {
 
     static final String[] MIX_NAMES = {"Standard","High-Strength","Lightweight"};
     static final double[] MIX_COSTS = {
-    135.0,  // Standard (~3000 PSI)
-    150.0,  // High-strength (~4000 PSI)
-    145.0   // Lightweight / specialty
-};
+        135.0,  // Standard (~3000 PSI)
+        150.0,  // High-strength (~4000 PSI)
+        145.0   // Lightweight / specialty
+    };
     static final String[] MIX_DESCS = {
         "General purpose. Good for slabs & foundations.",
         "Extra durability for heavy loads & structures.",
         "Reduced weight, easier to work with."
     };
+
+    // ── Concrete Fun Facts ────────────────────────────────────────────
+    static final String[] CONCRETE_FACTS = {
+        "The Roman Pantheon's unreinforced concrete dome has stood for over 1,900 years.",
+        "Concrete is the most widely used construction material on Earth.",
+        "It takes about 28 days for concrete to reach its full design strength.",
+        "The Hoover Dam used enough concrete to pave a two-lane highway from NYC to San Francisco.",
+        "Ancient Romans made concrete using volcanic ash and seawater — it actually gets stronger over time.",
+        "About 10 billion tons of concrete are produced globally every year.",
+        "Self-healing concrete exists — bacteria inside produce limestone to fill cracks automatically.",
+        "The word 'concrete' comes from the Latin 'concretus', meaning hardened or condensed.",
+        "Reinforced concrete was patented in 1867 by French gardener Joseph Monier.",
+        "Concrete has compressive strength up to 20x greater than its tensile strength — that's why rebar matters."
+    };
+    static int factIndex = 0;
 
     // ── Theme ─────────────────────────────────────────────────────────
     static class Theme {
@@ -49,33 +64,54 @@ public class M5_Project_Kuttler {
     static int lastBags=0,lastTMin=0,lastTMax=0,lastMix=0;
     static double lastWaste=0;
 
-    // ── Sound: play horn.wav from same directory as the .java file ───
+    // ── Sound: play horn.wav ──────────────────────────────────────────
     static void playHorn(){
         new Thread(()->{
             try{
-                // Look for horn.wav next to the running class
                 java.io.File wavFile = new java.io.File("horn.wav");
                 if(!wavFile.exists()){
-                    // Also try the directory of the class file
                     String classDir = M5_Project_Kuttler.class.getProtectionDomain()
                         .getCodeSource().getLocation().toURI().getPath();
                     wavFile = new java.io.File(new java.io.File(classDir).getParent(), "horn.wav");
                 }
-                if(!wavFile.exists()) return; // silently skip if file missing
+                if(!wavFile.exists()) return;
                 AudioInputStream ais = AudioSystem.getAudioInputStream(wavFile);
                 Clip clip = AudioSystem.getClip();
                 clip.open(ais);
                 clip.start();
-                // Wait for clip to finish then close
                 clip.addLineListener(event -> {
-                    if(event.getType() == LineEvent.Type.STOP){
-                        clip.close();
-                    }
+                    if(event.getType() == LineEvent.Type.STOP) clip.close();
                 });
             }catch(Exception ignored){}
         }).start();
     }
 
+    // ── Sound: whoosh via Web Audio API ──────────────────────────────
+    static void playWhoosh() {
+        new Thread(() -> {
+            try {
+                AudioFormat fmt = new AudioFormat(44100, 16, 1, true, false);
+                int frames = (int)(44100 * 0.32);
+                byte[] buf = new byte[frames * 2];
+                Random rng = new Random();
+                for (int i = 0; i < frames; i++) {
+                    double t = (double) i / frames;
+                    double env = Math.exp(-t * 9.0) * (1 - Math.exp(-t * 60));
+                    double sweep = Math.sin(2 * Math.PI * (800 - 600 * t) * i / 44100.0);
+                    double sample = (rng.nextDouble() * 2 - 1) * 0.6 + sweep * 0.4;
+                    short s = (short)(sample * env * 28000);
+                    buf[i * 2]     = (byte)(s & 0xFF);
+                    buf[i * 2 + 1] = (byte)((s >> 8) & 0xFF);
+                }
+                SourceDataLine line = AudioSystem.getSourceDataLine(fmt);
+                line.open(fmt, buf.length);
+                line.start();
+                line.write(buf, 0, buf.length);
+                line.drain();
+                line.close();
+            } catch (Exception ignored) {}
+        }).start();
+    }
 
     // ── Card Panel ────────────────────────────────────────────────────
     static class CardPanel extends JPanel {
@@ -125,7 +161,6 @@ public class M5_Project_Kuttler {
             for(int i=0;i<120;i++) parts.add(new Particle(cx,cy));
             if(t!=null) t.stop();
             t=new Timer(16,null);
-            // Use ActionListener so we can reference t via the event source
             t.addActionListener(new ActionListener(){
                 public void actionPerformed(ActionEvent e){
                     parts.removeIf(Particle::dead);
@@ -139,10 +174,53 @@ public class M5_Project_Kuttler {
         @Override protected void paintComponent(Graphics g){super.paintComponent(g);Graphics2D g2=(Graphics2D)g;g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);for(Particle p:new ArrayList<>(parts)){g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER,p.alpha()));g2.setColor(p.color);AffineTransform old=g2.getTransform();g2.rotate(Math.toRadians(p.rot),p.x,p.y);int s=(int)p.size;if(p.shape==0)g2.fillRect((int)p.x-s/2,(int)p.y-s/2,s,s/2);else if(p.shape==1)g2.fillOval((int)p.x-s/2,(int)p.y-s/2,s,s);else{int[]px={(int)p.x,(int)(p.x+s/2),(int)(p.x-s/2)};int[]py={(int)(p.y-s/2),(int)(p.y+s/2),(int)(p.y+s/2)};g2.fillPolygon(px,py,3);}g2.setTransform(old);}g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER,1f));}
     }
 
+    // ── Shimmer Panel ─────────────────────────────────────────────────
+    static class ShimmerPanel extends JPanel {
+        private float shimmerX = -1f;
+        private Timer shimmerTimer;
+        ShimmerPanel() { setOpaque(false); setLayout(null); }
+
+        void sweep() {
+            shimmerX = 0f;
+            if (shimmerTimer != null) shimmerTimer.stop();
+            shimmerTimer = new Timer(12, null);
+            shimmerTimer.addActionListener(new ActionListener() {
+                public void actionPerformed(ActionEvent e) {
+                    shimmerX += 0.035f;
+                    repaint();
+                    if (shimmerX > 1.4f) { shimmerTimer.stop(); shimmerX = -1f; repaint(); }
+                }
+            });
+            shimmerTimer.start();
+        }
+
+        @Override protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            if (shimmerX < 0) return;
+            Graphics2D g2 = (Graphics2D) g.create();
+            int w = getWidth(), h = getHeight();
+            int cx = (int)(shimmerX * (w + 120)) - 60;
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            GradientPaint gp = new GradientPaint(
+                cx - 60, 0, new Color(255,255,255,0),
+                cx,      0, new Color(255,255,255,55),
+                true
+            );
+            g2.setPaint(gp);
+            int[] px = { cx-80, cx+30, cx+80, cx-30 };
+            int[] py = { 0, 0, h, h };
+            g2.fillPolygon(px, py, 4);
+            g2.dispose();
+        }
+    }
+
     // ── Concrete pour results card ────────────────────────────────────
-    static class ConcreteResultsCard extends JPanel {
+    static class ConcreteResultsCard extends CardPanel {
         private float fillLevel=0f; private Timer ft; private boolean hasData=false;
-        ConcreteResultsCard(){setOpaque(false);}
+            ConcreteResultsCard(){
+            super(16); // pass arc value
+            setOpaque(false);
+            }
         void animateFill(){hasData=true;fillLevel=0f;if(ft!=null)ft.stop();ft=new Timer(20,null);ft.addActionListener(new ActionListener(){public void actionPerformed(ActionEvent e){fillLevel=Math.min(1f,fillLevel+0.018f);repaint();if(fillLevel>=1f)ft.stop();}});ft.start();}
         void reset(){fillLevel=0f;hasData=false;repaint();}
         @Override protected void paintComponent(Graphics g){
@@ -213,7 +291,27 @@ public class M5_Project_Kuttler {
 
     // ── Progress bar ──────────────────────────────────────────────────
     static JProgressBar makeProgressBar(){JProgressBar pb=new JProgressBar(0,100);pb.setStringPainted(true);pb.setString("Ready");pb.setValue(0);pb.setForeground(new Color(39,174,96));pb.setBackground(new Color(220,220,220));pb.setFont(new Font("SansSerif",Font.BOLD,11));pb.setPreferredSize(new Dimension(520,22));return pb;}
-    static void animateProgressBar(JProgressBar pb,TruckPanel truck,Runnable onComplete){pb.setValue(0);pb.setString("Calculating...");pb.setForeground(new Color(52,152,219));Timer t=new Timer(15,null);t.addActionListener(new ActionListener(){int p=0;public void actionPerformed(ActionEvent e){p+=4;pb.setValue(Math.min(p,100));if(p>=100){t.stop();pb.setString("Done!");pb.setForeground(new Color(39,174,96));}}});t.start();truck.start(onComplete);}
+    static void animateProgressBar(JProgressBar pb,TruckPanel truck,Runnable onComplete){
+        pb.setValue(0);pb.setString("Calculating...");pb.setForeground(new Color(52,152,219));
+        Timer t=new Timer(15,null);
+        t.addActionListener(new ActionListener(){int p=0;public void actionPerformed(ActionEvent e){
+            p+=4;pb.setValue(Math.min(p,100));
+            if(p>=100){
+                t.stop();
+                // Bouncing checkmark + flash
+                pb.setString("\u2713 Done!");
+                pb.setForeground(new Color(39,174,96));
+                Timer flash=new Timer(120,null);
+                flash.addActionListener(new ActionListener(){int f=0;public void actionPerformed(ActionEvent ev){
+                    pb.setForeground(f%2==0?new Color(80,220,120):new Color(39,174,96));
+                    if(++f>=6){flash.stop();pb.setForeground(new Color(39,174,96));}
+                }});
+                flash.start();
+            }
+        }});
+        t.start();
+        truck.start(onComplete);
+    }
 
     // ── Count-up animators ────────────────────────────────────────────
     static void animateCount(JLabel l,double target,String pre,String suf,int dec){Timer t=new Timer(16,null);t.addActionListener(new ActionListener(){int s=0;final int tot=30;public void actionPerformed(ActionEvent e){s++;l.setText(pre+String.format("%."+dec+"f",target*((double)s/tot))+suf);if(s>=tot){t.stop();l.setText(pre+String.format("%."+dec+"f",target)+suf);}}}); t.start();}
@@ -225,14 +323,41 @@ public class M5_Project_Kuttler {
     static String jobLabel(double v){return v<SMALL_JOB?"Small Job":v<MEDIUM_JOB?"Medium Job":"Large Job";}
     static void styleBtn(JButton b,Color bg,Color fg){b.setBackground(bg);b.setForeground(fg);b.setFont(new Font("SansSerif",Font.BOLD,13));b.setFocusPainted(false);b.setBorderPainted(false);b.setOpaque(true);b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));b.setBorder(BorderFactory.createEmptyBorder(8,18,8,18));}
 
+    // ── Pill badge helper ─────────────────────────────────────────────
+    static String pillHtml(Color c, String text) {
+        return String.format(
+            "<html><span style='background-color:#%02x%02x%02x; color:white; padding:3px 12px; border-radius:8px; font-size:12px;'>&nbsp;%s&nbsp;</span></html>",
+            c.getRed(), c.getGreen(), c.getBlue(), text
+        );
+    }
+
     // ── Globals ───────────────────────────────────────────────────────
     static JFrame mainFrame;
     static ConfettiPanel confettiLayer;
+    static ShimmerPanel shimmerLayer;
 
     public static void main(String[] args){SwingUtilities.invokeLater(()->createAndShowGUI());}
-    static void createAndShowGUI(){mainFrame=new JFrame("Jim's Concrete Slabs");mainFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);mainFrame.setSize(640,1100);mainFrame.setLocationRelativeTo(null);confettiLayer=new ConfettiPanel();confettiLayer.setBounds(0,0,640,1100);mainFrame.setGlassPane(confettiLayer);confettiLayer.setVisible(true);buildUI();mainFrame.setVisible(true);}
+    static void createAndShowGUI(){
+        mainFrame=new JFrame("Jim's Concrete Slabs");
+        mainFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        mainFrame.setSize(640,1100);
+        mainFrame.setLocationRelativeTo(null);
 
-    
+        // Glass pane: layered confetti + shimmer
+        JPanel glassPane = new JPanel(null);
+        glassPane.setOpaque(false);
+        confettiLayer=new ConfettiPanel();
+        confettiLayer.setBounds(0,0,640,1100);
+        shimmerLayer=new ShimmerPanel();
+        shimmerLayer.setBounds(0,0,640,1100);
+        glassPane.add(confettiLayer);
+        glassPane.add(shimmerLayer);
+        mainFrame.setGlassPane(glassPane);
+        glassPane.setVisible(true);
+
+        buildUI();
+        mainFrame.setVisible(true);
+    }
 
     // ── Print report ──────────────────────────────────────────────────
     static void printReport(){
@@ -246,8 +371,6 @@ public class M5_Project_Kuttler {
             g2.translate(x, y);
             int cx = (int)(w / 2);
             int iy = 30;
-
-            // Header bar
             g2.setColor(new Color(52, 73, 94));
             g2.fillRoundRect(0, 0, (int)w, 44, 10, 10);
             g2.setColor(Color.WHITE);
@@ -256,8 +379,6 @@ public class M5_Project_Kuttler {
             String heading = "Jim's Concrete Slabs - Job Report";
             g2.drawString(heading, cx - fm.stringWidth(heading) / 2, 28);
             iy = 70;
-            
-            // Detail rows
             g2.setColor(new Color(52, 73, 94));
             String[][] rows = {
                 {"Mix Type:",         MIX_NAMES[lastMix]},
@@ -279,8 +400,6 @@ public class M5_Project_Kuttler {
                 g2.drawLine((int)(w * 0.1), iy - 6, (int)(w * 0.9), iy - 6);
                 g2.setColor(new Color(52, 73, 94));
             }
-
-            // Footer
             g2.setFont(new Font("SansSerif", Font.ITALIC, 10));
             g2.setColor(Color.GRAY);
             g2.drawString("Generated by Jim's Concrete Slabs", 10, (int)(pf.getImageableHeight() - 20));
@@ -294,108 +413,80 @@ public class M5_Project_Kuttler {
         }
     }
 
-static class CostBreakdownDialog extends JDialog {
+    // ── Cost Breakdown Dialog ─────────────────────────────────────────
+    static class CostBreakdownDialog extends JDialog {
+        CostBreakdownDialog(JFrame parent) {
+            super(parent, "Full Job Cost Estimate", true);
+            setSize(450, 450);
+            setLocationRelativeTo(parent);
+            setLayout(new BorderLayout());
+            getContentPane().setBackground(theme().bg);
 
-    CostBreakdownDialog(JFrame parent) {
-        super(parent, "Full Job Cost Estimate", true);
-        setSize(450, 450);
-        setLocationRelativeTo(parent);
-        setLayout(new BorderLayout());
-        getContentPane().setBackground(theme().bg);
+            CardPanel card = new CardPanel(18);
+            card.setLayout(new GridBagLayout());
+            card.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
 
-        // ── Main Card ─────────────────────────────
-        CardPanel card = new CardPanel(18);
-        card.setLayout(new GridBagLayout());
-        card.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
-
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(6, 6, 6, 6);
-        gbc.gridx = 0;
-        gbc.gridy = 0;
-        gbc.gridwidth = 2;
-
-        // Title
-        JLabel title = new JLabel("Job Cost Estimate");
-        title.setFont(new Font("SansSerif", Font.BOLD, 16));
-        title.setForeground(theme().accent);
-        card.add(title, gbc);
-
-        // ── Calculations ──────────────────────────
-        double laborRate;
-
-if (lastVolYd < 5) {
-    laborRate = 6.5; // small job (more expensive)
-} else if (lastVolYd < 20) {
-    laborRate = 5.75; // typical
-} else {
-    laborRate = 5.25; // bulk discount
-}
-        double deliveryCost = 180 * lastTMax; // avg per truck
-        double laborCost = lastArea * laborRate;
-        double equipmentCost = lastVolYd < 5 ? 150 : 300;
-        double totalCost = lastCost + laborCost + equipmentCost + deliveryCost;
-
-        gbc.gridwidth = 1;
-        gbc.gridy++;
-
-        // Helper to add rows
-        String[] labels = {
-            "Material Cost:",
-            "Labor Cost:",
-            "Equipment Cost:",
-            "Total:"
-        };
-
-        double[] values = {
-            lastCost,
-            laborCost,
-            equipmentCost,
-            totalCost
-        };
-
-        for (int i = 0; i < labels.length; i++) {
+            GridBagConstraints gbc = new GridBagConstraints();
+            gbc.insets = new Insets(6, 6, 6, 6);
             gbc.gridx = 0;
-            JLabel l = new JLabel(labels[i]);
-            l.setForeground(theme().text);
-            l.setFont(new Font("SansSerif", Font.BOLD, 12));
-            card.add(l, gbc);
+            gbc.gridy = 0;
+            gbc.gridwidth = 2;
 
-            gbc.gridx = 1;
-            JLabel v = new JLabel(String.format("$%.2f", values[i]));
-            v.setForeground(i == 3 ? theme().accentAlt : theme().accent);
-            v.setFont(new Font("SansSerif", Font.BOLD, 12));
-            card.add(v, gbc);
+            JLabel title = new JLabel("Job Cost Estimate");
+            title.setFont(new Font("SansSerif", Font.BOLD, 16));
+            title.setForeground(theme().accent);
+            card.add(title, gbc);
 
+            double laborRate;
+            if (lastVolYd < 5) laborRate = 6.5;
+            else if (lastVolYd < 20) laborRate = 5.75;
+            else laborRate = 5.25;
+
+            double deliveryCost  = 180 * lastTMax;
+            double laborCost     = lastArea * laborRate;
+            double equipmentCost = lastVolYd < 5 ? 150 : 300;
+            double totalCost     = lastCost + laborCost + equipmentCost + deliveryCost;
+
+            gbc.gridwidth = 1;
             gbc.gridy++;
+
+            String[] labels = {"Material Cost:", "Labor Cost:", "Equipment Cost:", "Delivery Cost:", "Total:"};
+            double[] values = {lastCost, laborCost, equipmentCost, deliveryCost, totalCost};
+
+            for (int i = 0; i < labels.length; i++) {
+                gbc.gridx = 0;
+                JLabel l = new JLabel(labels[i]);
+                l.setForeground(theme().text);
+                l.setFont(new Font("SansSerif", Font.BOLD, 12));
+                card.add(l, gbc);
+                gbc.gridx = 1;
+                JLabel v = new JLabel(String.format("$%.2f", values[i]));
+                v.setForeground(i == labels.length-1 ? theme().accentAlt : theme().accent);
+                v.setFont(new Font("SansSerif", Font.BOLD, 12));
+                card.add(v, gbc);
+                gbc.gridy++;
+            }
+
+            gbc.insets = new Insets(10, 6, 6, 6);
+            JLabel source = new JLabel("<html><i>Based on Fayetteville, NC market rates (Fay Block Materials region).</i></html>");
+            source.setForeground(theme().subtext);
+            source.setFont(new Font("SansSerif", Font.PLAIN, 10));
+            gbc.gridx = 0;
+            gbc.gridwidth = 2;
+            card.add(source, gbc);
+
+            JButton closeBtn = new JButton("Close");
+            styleBtn(closeBtn, theme().accent, Color.WHITE);
+            closeBtn.addActionListener(e -> dispose());
+            gbc.gridy++;
+            gbc.insets = new Insets(12, 6, 6, 6);
+            card.add(closeBtn, gbc);
+
+            add(card, BorderLayout.CENTER);
         }
-        // ── Source / Disclaimer ──────────────────────────
-        gbc.insets = new Insets(10, 6, 6, 6);
-JLabel source = new JLabel(
-    "<html><i>Based on Fayetteville, NC market rates (Fay Block Materials region).</i></html>"
-);
-source.setForeground(theme().subtext);
-source.setFont(new Font("SansSerif", Font.PLAIN, 10));
-
-gbc.gridx = 0;
-gbc.gridwidth = 2;
-gbc.gridy++;
-card.add(source, gbc);
-
-        // ── Close Button ──────────────────────────
-        JButton closeBtn = new JButton("Close");
-        styleBtn(closeBtn, theme().accent, Color.WHITE);
-        closeBtn.addActionListener(e -> dispose());
-
-        gbc.gridx = 0;
-        gbc.gridwidth = 2;
-        gbc.gridy++;
-        gbc.insets = new Insets(12, 6, 6, 6);
-        card.add(closeBtn, gbc);
-
-        add(card, BorderLayout.CENTER);
     }
-}
 
+    // ── Build UI ──────────────────────────────────────────────────────
     static void buildUI(){
         mainFrame.getContentPane().removeAll();
 
@@ -447,7 +538,7 @@ card.add(source, gbc);
         GridBagConstraints wc=new GridBagConstraints();wc.insets=new Insets(5,12,5,12);wc.fill=GridBagConstraints.HORIZONTAL;
         JLabel wasteTitle=new JLabel("Waste Factor");wasteTitle.setFont(new Font("SansSerif",Font.BOLD,13));wasteTitle.setForeground(theme().text);
         wc.gridx=0;wc.gridy=0;wc.gridwidth=3;wasteCard.add(wasteTitle,wc);wc.gridwidth=1;
-        JSlider wasteSlider=new JSlider(0,15,5); // 0-15% in whole %
+        JSlider wasteSlider=new JSlider(0,15,5);
         wasteSlider.setOpaque(false);wasteSlider.setMajorTickSpacing(5);wasteSlider.setMinorTickSpacing(1);wasteSlider.setPaintTicks(true);wasteSlider.setPaintLabels(true);wasteSlider.setForeground(theme().text);
         JLabel wasteLbl=new JLabel("Extra: 5%");wasteLbl.setFont(new Font("SansSerif",Font.BOLD,12));wasteLbl.setForeground(theme().accent);
         JLabel wasteDesc=new JLabel("Accounts for spillage, overfill & error.");wasteDesc.setFont(new Font("SansSerif",Font.ITALIC,11));wasteDesc.setForeground(theme().subtext);
@@ -455,27 +546,24 @@ card.add(source, gbc);
         wc.gridx=0;wc.gridy=1;wc.weightx=0.2;wasteCard.add(wasteLbl,wc);
         wc.gridx=1;wc.weightx=0.6;wasteCard.add(wasteSlider,wc);
         wc.gridx=0;wc.gridy=2;wc.gridwidth=2;wasteCard.add(wasteDesc,wc);
+
         // ── What-if comparison card ───────────────────────────────────
         CardPanel compareCard=new CardPanel(16);compareCard.setLayout(new GridBagLayout());
         GridBagConstraints cc=new GridBagConstraints();cc.insets=new Insets(5,10,5,10);cc.fill=GridBagConstraints.HORIZONTAL;
         JLabel cTitle=new JLabel("What-If Comparison");cTitle.setFont(new Font("SansSerif",Font.BOLD,13));cTitle.setForeground(theme().text);
         cc.gridx=0;cc.gridy=0;cc.gridwidth=4;compareCard.add(cTitle,cc);cc.gridwidth=1;
-        // Headers
         String[]cH={"","Slab A (current)","Slab B (compare)"};Color[]cC={theme().text,new Color(52,152,219),new Color(155,89,182)};
         for(int i=0;i<3;i++){JLabel h=new JLabel(cH[i],SwingConstants.CENTER);h.setFont(new Font("SansSerif",Font.BOLD,11));h.setForeground(cC[i]);cc.gridx=i;cc.gridy=1;compareCard.add(h,cc);}
-        // Compare input fields for slab B
         String[]cRowLbls={"Length:","Width:","Depth:"};
         JTextField[]bFields=new JTextField[3];
         JLabel[]aLabels=new JLabel[3];
         for(int i=0;i<3;i++){JLabel rl=new JLabel(cRowLbls[i]);rl.setForeground(theme().text);rl.setFont(new Font("SansSerif",Font.PLAIN,11));cc.gridx=0;cc.gridy=i+2;compareCard.add(rl,cc);aLabels[i]=new JLabel("--",SwingConstants.CENTER);aLabels[i].setForeground(new Color(52,152,219));aLabels[i].setFont(new Font("SansSerif",Font.PLAIN,11));cc.gridx=1;compareCard.add(aLabels[i],cc);bFields[i]=new JTextField("",7);bFields[i].setBackground(theme().bg);bFields[i].setForeground(theme().text);bFields[i].setCaretColor(theme().text);bFields[i].setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(theme().border,1,true),BorderFactory.createEmptyBorder(3,5,3,5)));cc.gridx=2;compareCard.add(bFields[i],cc);}
-        // Compare result rows
         String[]cResultLbls={"Volume (cu yd):","Est. Cost:","Bags:"};
         JLabel[]aRes=new JLabel[3],bRes=new JLabel[3];
         for(int i=0;i<3;i++){JLabel rl=new JLabel(cResultLbls[i]);rl.setForeground(theme().text);rl.setFont(new Font("SansSerif",Font.BOLD,11));cc.gridx=0;cc.gridy=i+5;compareCard.add(rl,cc);aRes[i]=new JLabel("--",SwingConstants.CENTER);aRes[i].setForeground(new Color(52,152,219));aRes[i].setFont(new Font("SansSerif",Font.BOLD,11));cc.gridx=1;compareCard.add(aRes[i],cc);bRes[i]=new JLabel("--",SwingConstants.CENTER);bRes[i].setForeground(new Color(155,89,182));bRes[i].setFont(new Font("SansSerif",Font.BOLD,11));cc.gridx=2;compareCard.add(bRes[i],cc);}
         JButton compareBtn=new JButton("Compare");styleBtn(compareBtn,new Color(155,89,182),Color.WHITE);
         cc.gridx=0;cc.gridy=8;cc.gridwidth=3;compareCard.add(compareBtn,cc);
         compareBtn.addActionListener(e->{
-            // Update Slab A labels from last calculation
             if(lastArea==0){JOptionPane.showMessageDialog(mainFrame,"Run a calculation first to populate Slab A.","No Data",JOptionPane.WARNING_MESSAGE);return;}
             aLabels[0].setText(String.format("%.1f ft",Math.sqrt(lastArea)));
             aLabels[1].setText(String.format("%.1f ft",Math.sqrt(lastArea)));
@@ -493,7 +581,6 @@ card.add(source, gbc);
                 bRes[0].setText(String.format("%.2f yd3",bVolYd));
                 bRes[1].setText(String.format("$%.2f",bCost));
                 bRes[2].setText(String.valueOf(bBags));
-                // Highlight cheaper option
                 Color win=new Color(39,174,96),lose=new Color(192,57,43);
                 aRes[1].setForeground(lastCost<=bCost?win:lose);
                 bRes[1].setForeground(bCost<=lastCost?win:lose);
@@ -516,12 +603,27 @@ card.add(source, gbc);
         for(int i=0;i<rLabels.length;i++){rgbc.gridy=i+2;rgbc.gridx=0;rgbc.anchor=GridBagConstraints.EAST;rgbc.weightx=0.5;JLabel nl=new JLabel(icons[i]+"  "+rLabels[i]);nl.setFont(new Font("SansSerif",Font.BOLD,12));nl.setForeground(theme().text);resultsCard.add(nl,rgbc);rgbc.gridx=1;rgbc.anchor=GridBagConstraints.WEST;rgbc.weightx=0.5;rValues[i]=new JLabel("--");rValues[i].setFont(new Font("SansSerif",Font.PLAIN,12));rValues[i].setForeground(theme().accent);resultsCard.add(rValues[i],rgbc);}
 
         JLabel tipLbl=new JLabel(" ");tipLbl.setFont(new Font("SansSerif",Font.ITALIC,12));tipLbl.setForeground(theme().subtext);tipLbl.setHorizontalAlignment(SwingConstants.CENTER);
+
+        // ── Fun fact label ────────────────────────────────────────────
+        JLabel factLbl=new JLabel(" ");
+        factLbl.setFont(new Font("SansSerif",Font.ITALIC,11));
+        factLbl.setForeground(theme().accentAlt);
+        factLbl.setHorizontalAlignment(SwingConstants.CENTER);
+        factLbl.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createMatteBorder(1,0,1,0,theme().border),
+            BorderFactory.createEmptyBorder(6,10,6,10)));
+
         GaugePanel gaugePanel=new GaugePanel();
 
         // ── History ───────────────────────────────────────────────────
         DefaultListModel<String> histModel=new DefaultListModel<>();
         JList<String> histList=new JList<>(histModel);histList.setFont(new Font("Monospaced",Font.PLAIN,11));histList.setBackground(theme().histBg);histList.setForeground(theme().histText);histList.setSelectionBackground(theme().border);
-        JScrollPane histScroll=new JScrollPane(histList);histScroll.setPreferredSize(new Dimension(520,100));histScroll.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(theme().border,2),"Calculation History",TitledBorder.DEFAULT_JUSTIFICATION,TitledBorder.DEFAULT_POSITION,new Font("SansSerif",Font.BOLD,12),theme().text));
+        JScrollPane histScroll=new JScrollPane(histList);histScroll.setPreferredSize(new Dimension(520,100));
+        histScroll.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createLineBorder(theme().border,2),
+            "Calculation History  [0 jobs]",
+            TitledBorder.DEFAULT_JUSTIFICATION,TitledBorder.DEFAULT_POSITION,
+            new Font("SansSerif",Font.BOLD,12),theme().text));
 
         // ── Buttons ───────────────────────────────────────────────────
         JButton calcBtn=new JButton("Calculate");styleBtn(calcBtn,theme().accent,Color.WHITE);
@@ -538,13 +640,14 @@ card.add(source, gbc);
         JPanel center=new JPanel();center.setLayout(new BoxLayout(center,BoxLayout.Y_AXIS));center.setBackground(theme().bg);center.setBorder(BorderFactory.createEmptyBorder(12,18,12,18));
         for(JComponent c:new JComponent[]{unitCard,mixCard,inputCard,wasteCard,compareCard})
             {c.setAlignmentX(Component.CENTER_ALIGNMENT);center.add(c);center.add(Box.createVerticalStrut(10));}
-        for(JComponent c:new JComponent[]{btnPanel,truckPanel,pbWrap,resultsCard,tipLbl,gaugePanel,histScroll})
+        for(JComponent c:new JComponent[]{btnPanel,truckPanel,pbWrap,resultsCard,tipLbl,factLbl,gaugePanel,histScroll})
             c.setAlignmentX(Component.CENTER_ALIGNMENT);
         center.add(btnPanel);center.add(Box.createVerticalStrut(8));
         center.add(truckPanel);center.add(Box.createVerticalStrut(4));
         center.add(pbWrap);center.add(Box.createVerticalStrut(10));
         center.add(resultsCard);center.add(Box.createVerticalStrut(4));
-        center.add(tipLbl);center.add(Box.createVerticalStrut(10));
+        center.add(tipLbl);center.add(Box.createVerticalStrut(4));
+        center.add(factLbl);center.add(Box.createVerticalStrut(10));
         center.add(gaugePanel);center.add(Box.createVerticalStrut(10));
         center.add(histScroll);center.add(Box.createVerticalStrut(8));
         JScrollPane scroll=new JScrollPane(center);scroll.setBorder(null);scroll.getVerticalScrollBar().setUnitIncrement(16);scroll.getViewport().setBackground(theme().bg);
@@ -562,10 +665,8 @@ card.add(source, gbc);
                 int mix=mixCombo.getSelectedIndex();double costPerYd=MIX_COSTS[mix];
                 double depthFt=depthIn/12.0,area=length*width,volFt=area*depthFt*wasteFactor,volYd=volFt/27.0,cost=volYd*costPerYd;
                 int bags=(int)Math.ceil(volFt/BAG_COVERAGE),tMin=(int)Math.ceil(volYd/10.0),tMax=(int)Math.ceil(volYd/8.0);
-                // Save for print/compare
                 lastArea=area;lastVolFt=volFt;lastVolYd=volYd;lastCost=cost;lastBags=bags;lastTMin=tMin;lastTMax=tMax;lastMix=mix;lastWaste=wasteFactor-1.0;
-                
-                // Update compare Slab A labels live
+
                 aLabels[0].setText(String.format("%.1f",rL)+(metric?" m":" ft"));
                 aLabels[1].setText(String.format("%.1f",rW)+(metric?" m":" ft"));
                 aLabels[2].setText(String.format("%.0f",rD)+(metric?" cm":" in"));
@@ -575,9 +676,18 @@ card.add(source, gbc);
                 calcBtn.setEnabled(false);
                 animateProgressBar(progressBar,truckPanel,()->{
                     Color jc=jobColor(volYd);
-                    jobSizeLbl.setText("\u25cf "+jobLabel(volYd)+" ("+MIX_NAMES[mix]+" Mix)");
-                    jobSizeLbl.setForeground(jc);for(JLabel lv:rValues)lv.setForeground(jc);
+
+                    // ── Pill badge for job size ────────────────────────
+                    jobSizeLbl.setText(pillHtml(jc, jobLabel(volYd) + " \u2014 " + MIX_NAMES[mix] + " Mix"));
+
+                    for(JLabel lv:rValues)lv.setForeground(jc);
                     resultsCard.animateFill();
+                    resultsCard.startGlow();
+
+                    // ── Shimmer sweep over results ─────────────────────
+                    shimmerLayer.setBounds(0, 0, mainFrame.getWidth(), mainFrame.getHeight());
+                    new Timer(400, ev -> { shimmerLayer.sweep(); ((Timer)ev.getSource()).stop(); }).start();
+
                     for(int i=0;i<rValues.length;i++)slideIn(rValues[i],i*80);
                     new Timer(0,ev->{animateCount(rValues[0],area,"","  sq ft",2);((Timer)ev.getSource()).stop();}).start();
                     new Timer(80,ev->{animateCount(rValues[1],volFt,"","  cu ft",2);((Timer)ev.getSource()).stop();}).start();
@@ -585,20 +695,49 @@ card.add(source, gbc);
                     new Timer(240,ev->{animateCount(rValues[3],cost,"$","",2);((Timer)ev.getSource()).stop();}).start();
                     new Timer(320,ev->{animateInt(rValues[4],bags,"  bags");((Timer)ev.getSource()).stop();}).start();
                     new Timer(400,ev->{rValues[5].setText(tMin+"-"+tMax+" truck(s)");((Timer)ev.getSource()).stop();}).start();
-                    tipLbl.setText(tip);gaugePanel.update(bags,tMin,tMax,cost);histModel.add(0,hist);
+
+                    tipLbl.setText(tip);
+
+                    // ── Fun fact ──────────────────────────────────────
+                    factLbl.setText("Did you know? " + CONCRETE_FACTS[factIndex % CONCRETE_FACTS.length]);
+                    factIndex++;
+
+                    gaugePanel.update(bags,tMin,tMax,cost);
+                    histModel.add(0,hist);
+
+                    // ── History badge update ───────────────────────────
+                    histScroll.setBorder(BorderFactory.createTitledBorder(
+                        BorderFactory.createLineBorder(theme().border,2),
+                        "Calculation History  ["+histModel.size()+" job"+(histModel.size()==1?"":"s")+"]",
+                        TitledBorder.DEFAULT_JUSTIFICATION,TitledBorder.DEFAULT_POSITION,
+                        new Font("SansSerif",Font.BOLD,12),theme().text));
+
                     int cx=mainFrame.getWidth()/2,cy=mainFrame.getHeight()/3;
                     confettiLayer.setBounds(0,0,mainFrame.getWidth(),mainFrame.getHeight());
                     playHorn();
                     confettiLayer.burst(cx,cy);
-                    
                     calcBtn.setEnabled(true);
                     new CostBreakdownDialog(mainFrame).setVisible(true);
                 });
             }catch(NumberFormatException ex){JOptionPane.showMessageDialog(mainFrame,"Please fill in all fields with valid numbers.","Input Error",JOptionPane.ERROR_MESSAGE);}
         });
 
-        resetBtn.addActionListener(e->{for(JTextField f:fields)f.setText("");for(JLabel lv:rValues){lv.setText("--");lv.setForeground(theme().accent);lv.setVisible(true);}jobSizeLbl.setText(" ");tipLbl.setText(" ");progressBar.setValue(0);progressBar.setString("Ready");progressBar.setForeground(new Color(39,174,96));gaugePanel.reset();truckPanel.reset();resultsCard.reset();});
-        clearBtn.addActionListener(e->histModel.clear());
+        resetBtn.addActionListener(e->{
+            playWhoosh();
+            for(JTextField f:fields)f.setText("");
+            for(JLabel lv:rValues){lv.setText("--");lv.setForeground(theme().accent);lv.setVisible(true);}
+            jobSizeLbl.setText(" ");tipLbl.setText(" ");factLbl.setText(" ");
+            progressBar.setValue(0);progressBar.setString("Ready");progressBar.setForeground(new Color(39,174,96));
+            gaugePanel.reset();truckPanel.reset();resultsCard.reset();
+        });
+        clearBtn.addActionListener(e->{
+            histModel.clear();
+            histScroll.setBorder(BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(theme().border,2),
+                "Calculation History  [0 jobs]",
+                TitledBorder.DEFAULT_JUSTIFICATION,TitledBorder.DEFAULT_POSITION,
+                new Font("SansSerif",Font.BOLD,12),theme().text));
+        });
         printBtn.addActionListener(e->{if(lastArea==0){JOptionPane.showMessageDialog(mainFrame,"Run a calculation first before printing.","No Data",JOptionPane.WARNING_MESSAGE);return;}printReport();});
 
         mainFrame.add(topPanel,BorderLayout.NORTH);mainFrame.add(scroll,BorderLayout.CENTER);
